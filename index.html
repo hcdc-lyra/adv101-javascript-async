@@ -148,10 +148,85 @@
         </section>
 
         <!-- feedback center view-->
-        <section
-          id="view-feedback"
-          class="hidden space-y-8 animate-fade-in"
-        ></section>
+        <section id="view-feedback" class="hidden space-y-8 animate-fade-in">
+          <h2
+            class="text-2xl font-bold text-gray-800 border-b-2 border-gray-200 pb-2"
+          >
+            Feedback Center
+          </h2>
+
+          <!-- LEFT: Form Input Fields -->
+          <div
+            class="lg:col-span-1 bg-white rounded-xl shadow-lg p-6 border-t-8 border-hcdc-red h-fit sticky top-28"
+          >
+            <h3
+              id="form-heading"
+              class="text-lg font-bold text-gray-800 border-b-2 border-gray-100 pb-3 mb-6"
+            >
+              New Feedback
+            </h3>
+
+            <form id="feedback-form">
+              <div class="mb-4">
+                <label class="block text-gray-700 text-sm font-bold mb-2"
+                  >Subject</label
+                >
+                <input
+                  type="text"
+                  id="feedback-title"
+                  class="w-full p-3 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:border-hc-blue"
+                  required
+                />
+              </div>
+
+              <div class="mb-6">
+                <label class="block text-gray-700 text-sm font-bold mb-2"
+                  >Message</label
+                >
+                <textarea
+                  id="feedback-body"
+                  class="w-full p-3 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:border-hc-blue"
+                  required
+                ></textarea>
+              </div>
+
+              <button
+                type="submit"
+                id="submit-btn"
+                class="bg-hc-blue hover:bg-blue-900 text-white font-bold py-3 px-6 rounded-lg shadow transition-colors w-full"
+              >
+                Submit Feedback
+              </button>
+
+              <button
+                type="button"
+                id="cancel-edit-btn"
+                onclick="cancelEdit()"
+                class="hidden mt-3 w-full bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-2 px-6 rounded-lg transition-colors"
+              >
+                Cancel Edit
+              </button>
+
+              <p id="feedback-status" class="mt-4 text-sm font-bold hidden"></p>
+            </form>
+          </div>
+
+          <!-- LIST OF FEEDBACKS -->
+          <div
+            class="lg:col-span-3 bg-white rounded-xl shadow-lg p-6 border-t-8 border-hc-blue"
+          >
+            <h3
+              class="text-lg font-bold text-gray-800 border-b-2 border-gray-100 pb-3 mb-6"
+            >
+              Your History
+            </h3>
+
+            <div id="history-loading" class="text-gray-500 italic">
+              Loading your history...
+            </div>
+            <div id="history-container" class="space-y-4"></div>
+          </div>
+        </section>
       </main>
     </div>
 
@@ -172,6 +247,9 @@
     </style>
 
     <script>
+      // global variable to track if we are editing (put) or creating (post)
+      let currentEditingId = null;
+
       function switchTab(tabName) {
         document.getElementById("view-dashboard").classList.add("hidden");
         document.getElementById("view-feedback").classList.add("hidden");
@@ -215,12 +293,14 @@
         document.getElementById("news-loading").style.display = "block";
 
         try {
-          const response = await fetch('https://jsonplaceholder.typicode.com/posts?_limit=3');
+          const response = await fetch(
+            "https://jsonplaceholder.typicode.com/posts?_limit=3",
+          );
           const posts = await response.json();
 
-          document.getElementById('news-loading').style.display = 'none';
+          document.getElementById("news-loading").style.display = "none";
 
-          posts.forEach(post => {
+          posts.forEach((post) => {
             container.innerHTML += `
             <div class="p-4 bg-gray-50 border-l-4 border-hc-blue rounded">
               <h4 class="font-bold text-gray-800 capitalize mb-1">${post.title}</h4>
@@ -228,15 +308,169 @@
             </div>
             `;
           });
-
-
         } catch (error) {
           container.innerHTML = '<p class="text-red-500">Network error.</p>';
         }
       }
 
+      async function loadFeedbacks() {
+        const container = document.getElementById("history-container");
+
+        try {
+          const response = await fetch(
+            "https://jsonplaceholder.typicode.com/posts?userId=1&_limit=2",
+          );
+
+          const feedbacks = await response.json();
+
+          document.getElementById("history-loading").style.display = "none";
+
+          feedbacks.forEach((fb) =>
+            renderFeedbackToUI(fb.id, fb.title, fb.body),
+          );
+        } catch (error) {
+          container.innerHTML = `<p>Could not load history.</p>`;
+        }
+      }
+
+      function renderFeedbackToUI(id, title, body) {
+        const container = document.getElementById("history-container");
+
+        let div = document.getElementById(`{feedback-${id}}`);
+
+        if (!div) {
+          div = document.createElement("div");
+          div.id = `feedback-${id}`;
+          div.className =
+            "p-5 border border-gray-200 rounded-lg bg-white shadow-sm flex flex-col gap-3";
+          container.prepend(div);
+        }
+
+        div.innerHTML = `
+          <div>
+            <span class="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-4">Ticket #${id}</span>
+
+            <h4 class="font-bold text-hc-blue capitalize mb-1">${title}</h4>
+
+            <p class="text-sm text-gray-600">${body}</p>
+          </div>
+
+          <div class="flex gap-2 justify-end border-t border-gray-100 pt-3 mt-1">
+            <button onclick="startEdit(${id})">EDIT</button>
+            <button onclick="deleteFeedback(${id})">REMOVE</button>
+          </div>
+        `;
+      }
+
+      // SUBMIT FEEDBACK (POST) OR (PUT)
+      document
+        .getElementById("feedback-form")
+        .addEventListener("submit", async function (event) {
+          event.preventDefault();
+
+          const btn = document.getElementById("submit-btn");
+          const statusText = document.getElementById("feedback-status");
+          const title = document.getElementById("feedback-title").value;
+          const body = document.getElementById("feedback-body").value;
+
+          btn.disabled = true;
+          btn.textContent = "Communicating with server";
+          statusText.classList.add("hidden");
+
+          try {
+            // if currentEditingId is null, so we are posting / creating
+            // if currentEditingId has a number, we are putting / updating
+
+            const isUpdating = currentEditingId !== null;
+
+            const url = isUpdating
+              ? `https://jsonplaceholder.typicode.com/posts/${currentEditingId}`
+              : `https://jsonplaceholder.typicode.com/posts/`;
+
+            const method = isUpdating ? "PUT" : "POST";
+
+            const response = await fetch(url, {
+              method: method,
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                id: currentEditingId,
+                title: title,
+                body: body,
+                userId: 1,
+              }),
+            });
+
+            const result = await response.json();
+
+            renderFeedbackToUI(result.id, result.title, result.body);
+
+            statusText.textContent = `Success! Feedback ${isUpdating ? 'Updated': 'Created'}`;
+            statusText.className =
+              "mt-4 text-sm font-bold text-green-600 block";
+
+            cancelEdit();
+
+          } catch (error) {
+            statusText.textContent = `Connection error`;
+            statusText.className = "mt-4 text-sm font-bold text-red-600 block";
+          } finally {
+            btn.disabled = false;
+          }
+        });
+
+      // START FEEDBACK
+      function startEdit(id) {
+        // get text from the existing HTML DOM
+        const card = document.getElementById(`feedback-${id}`);
+        const currentTitle = card.querySelector('h4').textContent;
+        const currentBody = card.querySelector('p').textContent;
+
+        // put the content to the input fields
+        document.getElementById('feedback-title').value = currentTitle;
+        document.getElementById('feedback-body').value = currentBody;
+
+        currentEditingId = id;
+        document.getElementById('form-heading').textContent = `Editing Ticket # ${id}`;
+        document.getElementById('submit-btn').textContent = 'Update Feedback';
+        document.getElementById('submit-btn').className = 'bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg shadow transition-colors w-full';
+        document.getElementById('cancel-edit-btn').classList.remove('hidden');
+      }
+
+      function cancelEdit() {
+        currentEditingId = null;
+        document.getElementById('feedback-title').value = '';
+        document.getElementById('feedback-body').value = '';
+        document.getElementById('form-heading').textContent = 'New Feedback';
+        document.getElementById('submit-btn').textContent = 'Submit Feedback';
+        document.getElementById('submit-btn').className = 'bg-hc-blue hover:bg-blue-900 text-white font-bold py-3 px-6 rounded-lg shadow transition-colors w-full';
+        document.getElementById('cancel-edit-btn').classList.add('hidden');
+      }
+
+      // DELETE FEEDBACK
+      async function deleteFeedback(id) {
+        const card = document.getElementById(`feedback-${id}`);
+        card.style.opacity = '0.4';
+
+        try {
+          const response = await fetch(`https://jsonplaceholder.typicode.com/posts/${id}`, {
+            method: 'DELETE'
+          });
+
+          if(response.ok) {
+            card.remove();
+          } else {
+            throw new Error('Delete failed');
+          }
+
+        } catch(error) {
+          card.style.opacity = '1';
+          alert('Network error');
+        }
+      }
+
       loadStudentProfile();
       loadNews();
+      loadFeedbacks();
     </script>
   </body>
 </html>
